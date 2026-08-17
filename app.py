@@ -1,41 +1,33 @@
 import streamlit as st
 import cv2
 import numpy as np
+from PIL import Image
 
-# --- 1. Page Configuration ---
-st.set_page_config(page_title="Face Detection", page_icon="👤", layout="centered")
+st.set_page_config(page_title="Face Detection", page_icon="👤")
+st.title("👤 Face Detection")
+st.write("Detect human faces using OpenCV Haar Cascade.")
 
-# --- 2. Load and Cache the Detector ---
-# Caching ensures the XML file is loaded once into memory instead of on every rerun
-@st.cache_resource
-def load_detector():
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    return cv2.CascadeClassifier(cascade_path)
+cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+face_detector = cv2.CascadeClassifier(cascade_path)
 
-face_detector = load_detector()
+if face_detector.empty():
+    st.error("Could not load the Haar Cascade face detector.")
+    st.stop()
 
-# --- 3. Build the UI ---
-st.title("👤 Face Detection App")
-st.write("Upload a photo or snap one live with your camera.")
+uploaded_file = st.file_uploader(
+    "Upload an image containing one or more faces",
+    type=["jpg", "jpeg", "png"]
+)
 
-# Dual input choice
-source = st.radio("Choose Input Method:", ["Upload photo", "Use camera"], horizontal=True)
+if uploaded_file:
+    image_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    face_image = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
 
-if source == "Upload photo":
-    image_file = st.file_uploader("Choose a photo (JPG/PNG)", type=["jpg", "jpeg", "png"])
-else:
-    image_file = st.camera_input("Take a photo")
+    if face_image is None:
+        st.error("Could not read the uploaded image.")
+        st.stop()
 
-# --- 4. Process and Detect ---
-if image_file is not None:
-    # Read bytes directly and decode into an OpenCV image (BGR)
-    file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-
-    # Convert to grayscale for Haar Cascade[cite: 1]
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Run detection[cite: 1]
+    gray_image = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
     faces = face_detector.detectMultiScale(
         gray_image,
         scaleFactor=1.1,
@@ -43,22 +35,13 @@ if image_file is not None:
         minSize=(30, 30)
     )
 
-    # Draw bounding boxes on a copy of the image[cite: 1]
-    result = image.copy()
-    for (x, y, width, height) in faces:
-        # (0, 255, 0) gives a crisp green bounding box in BGR
-        cv2.rectangle(result, (x, y), (x + width, y + height), (0, 255, 0), 3)
+    output_image = face_image.copy()
+    for (x, y, w, h) in faces:
+        cv2.rectangle(output_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
-    # Convert BGR back to RGB for correct display in Streamlit[cite: 1]
-    result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
-    
-    st.divider()
-    st.image(result_rgb, caption=f"Detected Faces: {len(faces)}", use_container_width=True)
+    output_rgb = cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB)
 
-    # Status alerts
-    if len(faces) == 0:
-        st.warning("No face found. Try a clear, front-facing photo.")
-    else:
-        st.success(f"Successfully detected {len(faces)} face(s)!")
-
-st.caption("Built with OpenCV Haar Cascades & Streamlit")
+    st.success(f"Faces detected: {len(faces)}")
+    st.image(output_rgb, caption=f"Detected Faces: {len(faces)}", use_container_width=True)
+else:
+    st.info("Upload a photo to begin.")
